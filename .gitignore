@@ -1,0 +1,37 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+venv/
+.env*
+!.env.example
+
+# Secrets and Credentials
+secrets.*
+*.pem
+*.key
+
+# Data and Databases
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Environment and Installer files
+*.adk
+.adk/
