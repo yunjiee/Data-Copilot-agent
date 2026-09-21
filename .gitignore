@@ -35,3 +35,7 @@ secrets.*
 # Environment and Installer files
 *.adk
 .adk/
+
+#不用上傳管理的資料夾
+pptx/
+output/

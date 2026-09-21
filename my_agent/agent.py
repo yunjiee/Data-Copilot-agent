@@ -11,13 +11,26 @@ from google.adk.tools.mcp_tool.mcp_session_manager import (
 from .tools.calculation_tools import (
     calculate_growth_rate,
 )
-from .tools.system_tools import wait_for_system_loading
+from .tools.sql_tools import check_sql_syntax
+from .tools.system_tools import (
+    wait_for_system_loading,
+    save_context_to_file,
+    read_context_from_file
+)
+from .tools.pptx_tools import (
+    read_pptx_skill_guidelines,
+    analyze_reference_pptx,
+    safe_write_pptx_script,
+    safe_execute_pptx_script
+)
+from .tools.chart_tools import generate_chart
 from mcp import StdioServerParameters
 from .config import config
 from .prompts import (
     ROOT_AGENT_INSTRUCTION,
     ANALYTICS_AGENT_INSTRUCTION,
     KNOWLEDGE_AGENT_INSTRUCTION,
+    PPT_AGENT_INSTRUCTION,
 )
 import logging
 
@@ -102,7 +115,7 @@ analytics_agent = LlmAgent(
     model=config.worker_model,
     description="數據分析專家，負責處理 BigQuery SQL 查詢，取得營收、訂單與商品績效等量化數據。",
     instruction=ANALYTICS_AGENT_INSTRUCTION,
-    tools=[analytics_mcp_toolset],
+    tools=[analytics_mcp_toolset, check_sql_syntax],
 )
 
 # 建立專門處理知識庫的子 Agent
@@ -112,6 +125,22 @@ knowledge_agent = LlmAgent(
     description="知識庫專家，負責檢索公司內部政策、規定、文件與流程說明等質化資訊。",
     instruction=KNOWLEDGE_AGENT_INSTRUCTION,
     tools=[rag_mcp_toolset, wait_for_system_loading],
+)
+
+# 建立專門處理簡報製作的子 Agent
+presentation_agent = LlmAgent(
+    name="presentation_agent",
+    model=config.worker_model,
+    description="簡報製作專家，負責將分析結果與知識整理並輸出成 PowerPoint (PPTX) 檔案。",
+    instruction=PPT_AGENT_INSTRUCTION,
+    tools=[
+        generate_chart, 
+        read_pptx_skill_guidelines, 
+        analyze_reference_pptx,
+        safe_write_pptx_script, 
+        safe_execute_pptx_script,
+        read_context_from_file
+    ],
 )
 
 # 總管 Agent (負責與使用者溝通並派發任務)
@@ -125,7 +154,9 @@ root_agent = LlmAgent(
     tools=[
         AgentTool(agent=analytics_agent),
         AgentTool(agent=knowledge_agent),
+        AgentTool(agent=presentation_agent),
         calculate_growth_rate,
+        save_context_to_file,
     ],
     include_contents="default", # Agent 可以取得相關對話歷史
 )
