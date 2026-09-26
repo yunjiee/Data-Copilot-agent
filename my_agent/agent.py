@@ -2,35 +2,43 @@ import os
 import sys
 from pathlib import Path
 
-from google.adk.agents import LlmAgent
+from google.adk.agents import (
+    LlmAgent,
+)
 from google.adk.tools.mcp_tool import McpToolset
-from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools.mcp_tool.mcp_session_manager import (
     StdioConnectionParams,
 )
+
 from .tools.calculation_tools import (
     calculate_growth_rate,
 )
-from .tools.sql_tools import check_sql_syntax
-from .tools.system_tools import (
-    wait_for_system_loading,
-    save_context_to_file,
-    read_context_from_file
+from .tools.sql_tools import (
+    check_sql_syntax,
+    execute_sql_query,
 )
+from .tools.knowledge_tools import search_knowledge_base_guarded
 from .tools.pptx_tools import (
-    read_pptx_skill_guidelines,
     analyze_reference_pptx,
     safe_write_pptx_script,
-    safe_execute_pptx_script
+    safe_execute_pptx_script,
+    reset_pptx_execution_state,
 )
-from .tools.chart_tools import generate_chart
+from .tools.cache_tools import (
+    save_cache_data,
+    load_cache_data,
+    list_cache_files,
+)
+
+from .tools.chart_tools import render_vegalite_chart
+from .tools.skill_toolset import SkillToolset
 from mcp import StdioServerParameters
 from .config import config
 from .prompts import (
     ROOT_AGENT_INSTRUCTION,
     ANALYTICS_AGENT_INSTRUCTION,
     KNOWLEDGE_AGENT_INSTRUCTION,
-    PPT_AGENT_INSTRUCTION,
+    REPORT_AGENT_INSTRUCTION,
 )
 import logging
 
@@ -113,50 +121,76 @@ logging.basicConfig(
 analytics_agent = LlmAgent(
     name="analytics_agent",
     model=config.worker_model,
-    description="數據分析專家，負責處理 BigQuery SQL 查詢，取得營收、訂單與商品績效等量化數據。",
+    description="數據分析專家 (Producer)，負責處理 BigQuery SQL 查詢，取得營收、訂單與商品績效等量化數據並存入快取。",
     instruction=ANALYTICS_AGENT_INSTRUCTION,
-    tools=[analytics_mcp_toolset, check_sql_syntax],
+    tools=[
+        check_sql_syntax,
+        execute_sql_query,
+        analytics_mcp_toolset,
+        save_cache_data,
+    ],
 )
 
 # 建立專門處理知識庫的子 Agent
 knowledge_agent = LlmAgent(
     name="knowledge_agent",
     model=config.worker_model,
-    description="知識庫專家，負責檢索公司內部政策、規定、文件與流程說明等質化資訊。",
+    description="知識庫專家 (Producer)，負責檢索公司內部政策、規定、文件與流程說明等質化資訊並存入快取。",
     instruction=KNOWLEDGE_AGENT_INSTRUCTION,
-    tools=[rag_mcp_toolset, wait_for_system_loading],
-)
-
-# 建立專門處理簡報製作的子 Agent
-presentation_agent = LlmAgent(
-    name="presentation_agent",
-    model=config.worker_model,
-    description="簡報製作專家，負責將分析結果與知識整理並輸出成 PowerPoint (PPTX) 檔案。",
-    instruction=PPT_AGENT_INSTRUCTION,
     tools=[
-        generate_chart, 
-        read_pptx_skill_guidelines, 
-        analyze_reference_pptx,
-        safe_write_pptx_script, 
-        safe_execute_pptx_script,
-        read_context_from_file
+        search_knowledge_base_guarded,
+        save_cache_data,
     ],
 )
 
-# 總管 Agent (負責與使用者溝通並派發任務)
+# 建立 Report 專用的 SkillToolset (同時整合洞察手冊與 PPTX 規範)
+pptx_skills_dir = PROJECT_ROOT / "my_agent" / "skills" / "pptx"
+if (pptx_skills_dir / "pptx" / "SKILL.md").exists():
+    pptx_skills_dir = pptx_skills_dir / "pptx"
+
+report_skill_toolset = SkillToolset(
+    skills_dir=pptx_skills_dir,
+    skills=[
+        "insight_generation_skill.md",  # 洞察提煉框架 (透過 SkillResolver fallback 讀取)
+        "SKILL.md",                     # 簡報排版與主題配色手冊
+        "pptxgenjs.md",                # PptxGenJS 程式語法規範
+    ],
+)
+
+# 建立專門處理商業洞察與簡報製作的單一 Report Agent (Consumer)
+report_agent = LlmAgent(
+    name="report_agent",
+    model=config.worker_model,
+    description="商業洞察與簡報製作專家 (Consumer)，負責整合快取中的量化數據與質化知識，提煉洞察並直接產製 PowerPoint 簡報與圖表。",
+    instruction=REPORT_AGENT_INSTRUCTION,
+    tools=[
+        report_skill_toolset,
+        load_cache_data,
+        save_cache_data,
+        render_vegalite_chart,
+        safe_write_pptx_script,
+        safe_execute_pptx_script,
+        reset_pptx_execution_state,
+        analyze_reference_pptx,
+    ],
+)
+
+# 總管 Agent (Selector 角色，負責解析意圖與分派任務)
 root_agent = LlmAgent(
     name="coordinator_agent",
     model=config.worker_model,
     description=(
-        "TheLook eCommerce 總管 Agent，負責分析問題並分派給對應的專業子 Agent。"
+        "TheLook eCommerce 總管 Agent (Selector)，負責分析問題、檢查快取狀態並分派給專業子 Agent。"
     ),
     instruction=ROOT_AGENT_INSTRUCTION,
+    sub_agents=[
+        analytics_agent,
+        knowledge_agent,
+        report_agent,
+    ],
     tools=[
-        AgentTool(agent=analytics_agent),
-        AgentTool(agent=knowledge_agent),
-        AgentTool(agent=presentation_agent),
         calculate_growth_rate,
-        save_context_to_file,
+        list_cache_files,
     ],
     include_contents="default", # Agent 可以取得相關對話歷史
 )

@@ -8,37 +8,12 @@ MAX_TOTAL_EXECUTIONS = 5
 _pptx_retry_count = 0
 _total_execution_count = 0
 
-def read_pptx_skill_guidelines(has_reference: bool = False) -> str:
-    """
-    當使用者要求建立、修改簡報 (deck, slides, presentation) 且需要套用特定格式與排版時，請呼叫此工具。
-    此工具會回傳完整的 PPTX 技能手冊 (SKILL.md) 與程式碼範例 (pptxgenjs.md)。
-    如果有提供參考簡報，請將 has_reference 設為 True，將會額外提示有關簡報架構模仿的規範。
-    取得規範後，Agent 必須嚴格按照其中的指示，自行撰寫 Node.js (pptxgenjs) 腳本來生成簡報，並執行 Visual QA。
-    """
-    # 每次 Agent 重新閱讀手冊 (通常代表開始一份新的簡報任務) 時，將失敗計數與執行計數器歸零
+def reset_pptx_execution_state() -> str:
+    """重設 PPT 腳本執行的重試與計數器狀態（開始新的簡報製作任務時可調用）。"""
     global _pptx_retry_count, _total_execution_count
     _pptx_retry_count = 0
     _total_execution_count = 0
-
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    skill_dir = os.path.join(project_root, "pptx", "pptx")
-    
-    files_to_read = ["SKILL.md", "pptxgenjs.md", "editing.md"]
-    if has_reference:
-        files_to_read.append(os.path.join("scripts", "reference_guidelines.md"))
-
-    content = "=== PPTX SKILL & DESIGN GUIDELINES ===\n"
-    
-    for filename in files_to_read:
-        file_path = os.path.join(skill_dir, filename)
-        if os.path.exists(file_path):
-            with open(file_path, "r", encoding="utf-8") as f:
-                content += f"\n--- {filename} ---\n{f.read()}\n"
-        else:
-            content += f"\n[警告] 找不到檔案: {file_path}\n"
-            
-    content += f"\n[系統強制防護規範] 為了避免 AI 無限空轉與浪費 Token 資源，您總共只有 {MAX_TOTAL_EXECUTIONS} 次執行機會與 {MAX_PPTX_RETRIES} 次連續失敗重試的限制。請務必在寫程式前仔細思考並確保語法正確！"
-    return content
+    return "✅ PPTX 執行狀態與計數器已重設。"
 
 def analyze_reference_pptx(reference_filename: str) -> str:
     """
@@ -49,7 +24,7 @@ def analyze_reference_pptx(reference_filename: str) -> str:
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     # 假設簡報檔案放在 output 資料夾中或上傳到指定目錄
     output_dir = os.path.join(project_root, "output")
-    scripts_dir = os.path.join(project_root, "pptx", "pptx", "scripts")
+    scripts_dir = os.path.join(project_root, "my_agent", "skills", "pptx", "pptx", "scripts")
     
     safe_filename = os.path.basename(reference_filename)
     file_path = os.path.join(output_dir, safe_filename)
@@ -127,6 +102,9 @@ def safe_execute_pptx_script(filename: str) -> str:
     safe_filename = os.path.basename(filename)
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     output_dir = os.path.join(project_root, "output")
+    reports_dir = os.path.join(project_root, "mas_output", "reports")
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(reports_dir, exist_ok=True)
     file_path = os.path.join(output_dir, safe_filename)
     
     if not os.path.exists(file_path):

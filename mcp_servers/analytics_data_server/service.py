@@ -370,6 +370,13 @@ class AnalyticsService:
             raise ValueError(
                 "start_date 不可以晚於 end_date。"
             )
+            
+        day_diff = (parsed_end_date - parsed_start_date).days
+        if day_diff > 7:
+            raise ValueError(
+                f"查詢區間為 {day_diff} 天，已超過安全規範上限 7 天！"
+                f"請將查詢期間縮小至 7 天以內（例如：{parsed_start_date} 至 {parsed_start_date.replace(day=min(parsed_start_date.day + 6, 28))}）。"
+            )
 
         return (
             parsed_start_date,

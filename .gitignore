@@ -39,8 +39,9 @@ secrets.*
 #不用上傳管理的資料夾
 output/
 node_modules/
+data/qdrant/
 
 #其他測試用，不能公開分享的資料夾
-skills/
-my_agent/skills/pptx
+/skills/
+/my_agent/skills/pptx/
 repomix-output.xml
