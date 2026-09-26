@@ -8,9 +8,28 @@ from datetime import datetime
 from google.api_core.exceptions import GoogleAPICallError
 from google.cloud import bigquery
 from mcp_servers.analytics_data_server.config import settings
+from ..config import config
 from .cache_tools import save_cache_data
 
 logger = logging.getLogger(__name__)
+
+# --- 強制防護機制：記錄 SQL 驗證與修復失敗的次數 ---
+_sql_fix_count = 0
+
+
+def reset_sql_fix_state() -> str:
+    """重設 SQL 語法驗證與自我修正的重試計數器狀態。"""
+    global _sql_fix_count
+    _sql_fix_count = 0
+    return "✅ SQL 自我修正狀態與計數器已重設。"
+
+
+def _record_fix_failure() -> int:
+    """增加修正失敗計數並回傳目前累計次數。"""
+    global _sql_fix_count
+    _sql_fix_count += 1
+    return _sql_fix_count
+
 
 # 單次查詢預估掃描量安全上限（100 MiB）
 MAX_SCAN_BYTES_LIMIT = 100 * 1024 * 1024
@@ -71,11 +90,25 @@ def check_sql_syntax(sql: str) -> dict[str, Any]:
     Returns:
         包含 valid (bool)、預估處理位元組數或詳細錯誤建議的字典。
     """
+    max_retries = config.max_sql_fix_iterations
+
+    # 系統強制攔截：已達修正上限時直接鎖定，杜絕模型持續空轉重試
+    if _sql_fix_count >= max_retries:
+        return {
+            "status": "error",
+            "valid": False,
+            "retry_limit_exceeded": True,
+            "error_message": f"🛑 [系統強制攔截] 已達 SQL 自我修正次數上限 ({max_retries} 次)。系統已鎖定驗證權限。",
+            "suggestion": "請立即停止修正 SQL，並直接向使用者說明查詢失敗原因與遭遇的錯誤。",
+        }
+
     if not sql or not sql.strip():
+        fail_count = _record_fix_failure()
         return {
             "status": "error",
             "valid": False,
             "error_message": "SQL 語句不可為空。",
+            "attempts": fail_count,
         }
 
     # 第一階段：規則與除零防護驗證
@@ -85,14 +118,23 @@ def check_sql_syntax(sql: str) -> dict[str, Any]:
             "status": "error",
             "valid": False,
             "error_message": f"業務與安全規則檢驗失敗：{rule_check['error_message']}",
+            "retry_limit_exceeded": fail_count >= max_retries,
+            "attempts": fail_count,
+            "suggestion": (
+                "已達修正次數上限，請停止修復並回報使用者。"
+                if fail_count >= max_retries
+                else "請參考錯誤訊息修正 SQL 運算邏輯後重新檢查。"
+            ),
         }
 
     # 第二階段：BigQuery Dry Run 語法檢查
     if not settings.bigquery_project:
+        fail_count = _record_fix_failure()
         return {
             "status": "error",
             "valid": False,
             "error_message": "尚未設定 BigQuery 專案 ID。",
+            "attempts": fail_count,
         }
 
     client = bigquery.Client(
@@ -185,6 +227,9 @@ def execute_sql_query(sql: str) -> dict[str, Any]:
             filename=cache_filename,
             data=rows,
         )
+
+        # 查詢執行成功，重置自我修正計數器
+        reset_sql_fix_state()
 
         return {
             "status": "success",

@@ -39,7 +39,7 @@ ANALYTICS_AGENT_INSTRUCTION = f"""
    - 呼叫 `check_sql_syntax(sql=...)` 驗證語法、除零保護與掃描位元組數。
 3. **反思與修正 (Self-Correction)**：
    - 若 `check_sql_syntax` 回傳 `valid: false`，請閱讀 `error_message` 與 `suggestion`，分析錯誤原因並主動修正 SQL，重新呼叫 `check_sql_syntax`。
-   - 最多反思重試 3 次。
+   - 🛑 **程式強制停損**：最多重試 3 次。若收到 `retry_limit_exceeded: true`，代表已達系統強制上限，必須立即停止修正並向使用者說明失敗原因，絕不繼續嘗試。
 4. **安全執行**：
    - Dry Run 驗證通過 (`valid: true`) 後，呼叫 `execute_sql_query(sql=...)`（系統會在 Python 底層自動完成快取存檔）。
 5. **結構化回報**：整理關鍵數值與發現並回答使用者。

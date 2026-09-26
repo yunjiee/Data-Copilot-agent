@@ -16,6 +16,7 @@ from .tools.calculation_tools import (
 from .tools.sql_tools import (
     check_sql_syntax,
     execute_sql_query,
+    reset_sql_fix_state,
 )
 from .tools.knowledge_tools import search_knowledge_base_guarded
 from .tools.pptx_tools import (
@@ -128,6 +129,7 @@ analytics_agent = LlmAgent(
         execute_sql_query,
         analytics_mcp_toolset,
         save_cache_data,
+        reset_sql_fix_state,
     ],
 )
 
