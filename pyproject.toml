@@ -5,18 +5,37 @@ description = "Data Copilot - 智慧電商數據與知識整合助理"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "db-dtypes>=1.4.0",
     "google-adk>=2.5.0",
     "google-cloud-bigquery>=3.42.2",
     "langchain-core>=1.6.3",
+    "langchain-google-genai>=2.0.0",
     "markitdown[pptx]>=0.1.7",
     "matplotlib>=3.11.2",
     "mcp[cli]>=1.28,<2",
+    "pandas>=2.2.0",
     "pillow>=12.3.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
+    "pyarrow>=15.0.0",
     "python-dotenv>=1.2.2",
     "python-pptx>=1.0.2",
     "qdrant-client>=1.18.0",
     "sentence-transformers>=5.6.0",
     "toolbox-core>=1.2.0",
+    "vl-convert-python>=1.9.0.post1",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.3.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["my_agent", "mcp_servers"]

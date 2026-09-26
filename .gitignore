@@ -37,5 +37,10 @@ secrets.*
 .adk/
 
 #不用上傳管理的資料夾
-pptx/
 output/
+node_modules/
+
+#其他測試用，不能公開分享的資料夾
+skills/
+my_agent/skills/pptx
+repomix-output.xml

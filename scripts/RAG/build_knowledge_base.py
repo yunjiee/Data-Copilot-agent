@@ -11,12 +11,35 @@ RAG 知識庫離線建庫腳本 (Offline Ingestion Script)
 平時日常啟動 Agent 進行對話時「不需要」執行此腳本。
 """
 
+'''
+1. rag_settings.source_dir
+   → 找到 data/knowledge_base
+
+2. 掃描三份 Markdown
+
+3. 逐份 read_text()
+
+4. 將每份文件交給 TextChunker
+
+5. 把所有 Chunk 的 text 集合起來
+
+6. 一次或分批呼叫 embed_passages()，翻譯成向量矩陣
+
+7. 刪除舊 Collection
+
+8. 建立新的 Collection
+
+9. 將 Chunk、Vector、Metadata Upsert 到 Qdrant
+
+10. 輸出建庫結果
+'''
+
 
 import sys
 from pathlib import Path
 
 # 將專案根目錄加入 sys.path，解決 ModuleNotFoundError
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -28,6 +51,7 @@ from mcp_servers.rag_server.vector_store import QdrantVectorStore
 
 
 def main() -> None:
+    print("🚀 正在啟動知識庫建庫程序（正在載入 Embedding 模型與 PyTorch，請稍候）...")
     # 直接實例化，模組內部會自動讀取 rag_settings 的設定值
     chunker = TextChunker()
 

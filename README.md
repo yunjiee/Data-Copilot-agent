@@ -5,7 +5,7 @@
 
 ## ✨ 核心功能 (Core Features)
 
-本專案透過總管 Agent (Coordinator) 負責意圖識別，並動態分派任務給對應的專業 Agent，具備以下兩大核心能力：
+本專案透過總管 Agent (Coordinator) 負責意圖識別，並動態分派任務給對應的專業 Agent，具備以下三大核心能力：
 
 ### 1. 📊 MCP 聯動 BigQuery 數據分析 (Analytics Agent)
 透過 **MCP (Model Context Protocol)** 標準，Agent 能夠與 Google BigQuery 深度連動，達成自動化的數據探查。
@@ -18,6 +18,12 @@
 - **語意比對 (Semantic Search)**：將使用者問題轉換為向量，快速從內部文件中檢索出最相關的段落。
 - **精確溯源**：回覆時標註資料來源（如 `ecommerce_metric_definitions.md`），確保知識的正確性（例如嚴格區分「商品退貨率」與「訂單退貨率」）。
 
+### 3. 📈 自動化商業簡報生成 (Report Pipeline)
+整合數據洞察與規範定義，透過流水線依序由 `insight_agent` 與 `presentation_agent` 產出高品質投影片：
+- **商業洞察提煉**：自動歸納關鍵營運指標並規劃投影片大綱架構。
+- **圖表渲染與生成**：使用 Vega-Lite 渲染高解析視覺化圖表，並呼叫 PptxGenJS (Node.js) 自動排版輸出 PPTX 檔案。
+- **快取循環機制**：支援本地快取 (`mas_output/cache/`)，避免重複查詢資料庫，大幅加速簡報生成與調優。
+
 ---
 
 ## 🛠️ 開發前準備 (Prerequisites)
@@ -27,6 +33,7 @@
 | 工具 | 版本要求 | 說明 |
 |------|----------|------|
 | **Python** | 3.10 ~ 3.12 | 核心語言環境 |
+| **Node.js** | >= 18 | 執行 PPTX 生成腳本 (PptxGenJS) |
 | **uv** | 最新版 | Python 套件與虛擬環境管理 |
 | **Google Cloud SDK** | 最新版 | 用於 Vertex AI 帳戶授權 |
 
@@ -44,7 +51,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 ### 1. 進入專案目錄
 
 ```bash
-cd my-adk-project
+cd Data-Copilot-agent
 ```
 
 ### 2. 安裝所有 Python 依賴項
@@ -117,12 +124,6 @@ gcloud auth application-default print-access-token
 uv run adk web . --reload --reload_agents
 ```
 
-或是指定 `app` 子目錄：
-
-```bash
-uv run adk web app --reload --reload_agents
-```
-
 啟動後，在瀏覽器開啟：
 
 ```
@@ -138,13 +139,13 @@ http://localhost:8000
 
 | 檔案 | 說明 |
 |------|------|
-| [`app/config.py`](app/config.py) | Agent 使用的 Gemini 模型、最大迭代次數、輸出路徑等核心參數 |
-| [`app/agent.py`](app/agent.py) | Agent 的主要邏輯與子 Agent 定義 |
-| [`app/prompts.py`](app/prompts.py) | 各階段的 Prompt 模板 |
-| [`app/tools.py`](app/tools.py) | Agent 可呼叫的工具函式（如 Web 搜尋） |
-| `app/.env` | API Key / GCP 專案等敏感環境變數 |
+| [`my_agent/config.py`](my_agent/config.py) | Agent 使用的 Gemini 模型、最大迭代次數、輸出路徑等核心參數 |
+| [`my_agent/agent.py`](my_agent/agent.py) | Agent 的主要邏輯與子 Agent 定義 |
+| [`my_agent/prompts.py`](my_agent/prompts.py) | 各階段的 Prompt 模板 |
+| [`my_agent/tools.py`](my_agent/tools.py) | Agent 可呼叫的工具函式（如 Web 搜尋） |
+| `my_agent/.env` | API Key / GCP 專案等敏感環境變數 |
 
-### 調整模型（`app/config.py`）
+### 調整模型（`my_agent/config.py`）
 
 ```python
 @dataclass
@@ -162,7 +163,7 @@ class MASConfiguration:
 | `uv: command not found` | 重新安裝 `uv` 並確認已加入 PATH |
 | Vertex AI 認證失敗 | 執行 `gcloud auth application-default login` 重新取得憑證 |
 | 模型呼叫回傳 403 | 確認 GCP 帳號對 `ddd-gemini-enterprise` 專案有 Vertex AI 使用權限 |
-| Agent 啟動後頁面空白 | 確認 `app/__init__.py` 有正確匯出 Agent 物件 |
+| Agent 啟動後頁面空白 | 確認 `my_agent/__init__.py` 有正確匯出 Agent 物件 |
 
 ---
 
