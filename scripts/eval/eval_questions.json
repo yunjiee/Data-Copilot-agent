@@ -1,0 +1,22 @@
+[
+  {"id": 1, "question": "退貨率要怎麼計算？", "expected_source": "ecommerce_metric_definitions.md", "expected_keyword": "退貨件數 ÷ 已售件數"},
+  {"id": 2, "question": "商品退貨率和訂單退貨率可以混在一起比較嗎？", "expected_source": "ecommerce_metric_definitions.md", "expected_keyword": "商品退貨率與訂單退貨率不得混用"},
+  {"id": 3, "question": "淨營收的公式是什麼？", "expected_source": "ecommerce_metric_definitions.md", "expected_keyword": "淨營收 = 有效訂單營收 − 退貨金額"},
+  {"id": 4, "question": "訂單數可以直接用商品明細的列數來算嗎？", "expected_source": "ecommerce_metric_definitions.md", "expected_keyword": "不可直接使用商品明細列數"},
+  {"id": 5, "question": "有效訂單數是 0 的時候，平均訂單金額要怎麼處理？", "expected_source": "ecommerce_metric_definitions.md", "expected_keyword": "平均訂單金額不得計算"},
+  {"id": 6, "question": "購買轉換率的分母如果用工作階段數，要怎麼命名？", "expected_source": "ecommerce_metric_definitions.md", "expected_keyword": "工作階段購買轉換率"},
+  {"id": 7, "question": "30 天和 180 天的重複購買率可以直接比較嗎？", "expected_source": "ecommerce_metric_definitions.md", "expected_keyword": "30 天與 180 天的重複購買率不可直接比較"},
+  {"id": 8, "question": "資料欄位出現 NULL 或 <Other> 時應該怎麼歸類？", "expected_source": "ecommerce_metric_definitions.md", "expected_keyword": "歸類為「未知」或「未設定」"},
+  {"id": 9, "question": "正式營收報告應該納入哪些訂單狀態？", "expected_source": "ecommerce_business_rules.md", "expected_keyword": "僅納入已出貨或已完成的訂單"},
+  {"id": 10, "question": "什麼樣的商品會被列為低銷量商品？", "expected_source": "ecommerce_business_rules.md", "expected_keyword": "銷售件數少於 5 件"},
+  {"id": 11, "question": "高價值商品的判定標準是什麼？", "expected_source": "ecommerce_business_rules.md", "expected_keyword": "期間營收排名前 10%"},
+  {"id": 12, "question": "退貨率超過多少要標記為需關注商品？", "expected_source": "ecommerce_business_rules.md", "expected_keyword": "退貨率高於 15%"},
+  {"id": 13, "question": "沉睡客和流失客怎麼區分？", "expected_source": "ecommerce_business_rules.md", "expected_keyword": "超過 180 天沒有購買"},
+  {"id": 14, "question": "會員分群結果可以拿來做信用評估嗎？", "expected_source": "ecommerce_business_rules.md", "expected_keyword": "不得作為信用、保險或其他高風險決策依據"},
+  {"id": 15, "question": "評估促銷活動成效時除了營收還要看哪些指標？", "expected_source": "ecommerce_business_rules.md", "expected_keyword": "訂單數、購買人數、平均訂單金額及退貨率"},
+  {"id": 16, "question": "比較不同天數期間的總營收時要注意什麼？", "expected_source": "ecommerce_analysis_policy.md", "expected_keyword": "轉換為每日平均"},
+  {"id": 17, "question": "單日營收異常上升的判定門檻是多少？", "expected_source": "ecommerce_analysis_policy.md", "expected_keyword": "高於最近 7 日平均值 50%"},
+  {"id": 18, "question": "商品績效排名單次查詢最多可以回傳幾項商品？", "expected_source": "ecommerce_analysis_policy.md", "expected_keyword": "單次查詢不得超過 20 項"},
+  {"id": 19, "question": "Agent 回答時可以把相關性說成因果關係嗎？", "expected_source": "ecommerce_analysis_policy.md", "expected_keyword": "不得將資料相關性描述成因果關係"},
+  {"id": 20, "question": "使用 GA4 範例資料做報告時要註明哪些限制？", "expected_source": "ecommerce_analysis_policy.md", "expected_keyword": "資料為經過模糊處理的範例資料"}
+]
