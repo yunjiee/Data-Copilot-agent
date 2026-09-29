@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-from google.adk.agents import (
+from google.adk.agents import ( 
     LlmAgent,
 )
 from google.adk.tools.mcp_tool import McpToolset
@@ -96,15 +96,21 @@ analytics_mcp_toolset = McpToolset(
     ],
 )
 
+# 根據環境變數 RAG_BACKEND 動態決定啟動哪一個 RAG MCP Server
+rag_server_module = (
+    "mcp_servers.rag_langchain_server.server"
+    if os.getenv("RAG_BACKEND", "").strip().lower() == "langchain"
+    else "mcp_servers.rag_server.server"
+)
+
 # 建立 RAG 使用的 MCP Client／Toolset
 rag_mcp_toolset = McpToolset(
     connection_params=StdioConnectionParams(
         server_params=StdioServerParameters(
             command=sys.executable,
-            # 假設你的 RAG 伺服器啟動檔在 mcp_servers.rag_server.server
             args=[
                 "-m",
-                "mcp_servers.rag_server.server",
+                rag_server_module,
             ],
             cwd=str(PROJECT_ROOT),
             env=server_environment,

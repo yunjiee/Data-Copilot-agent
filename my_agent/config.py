@@ -32,7 +32,7 @@ class AgentConfiguration:
         critic_model (str): Model for SQL evaluation and quality review.
         worker_model (str): Model for schema generation and tool building.
         max_sql_fix_iterations (int): Maximum SQL fix loop iterations.
-        mas_project_root (str): Root path for SSOT output files.
+        mas_project_root (str): Root path for generated output and cache files.
     """
 
     critic_model: str = "gemini-3.1-pro-preview"
