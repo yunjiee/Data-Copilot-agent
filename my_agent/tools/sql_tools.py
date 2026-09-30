@@ -31,6 +31,44 @@ def _record_fix_failure() -> int:
     return _sql_fix_count
 
 
+# 允許查詢的資料集前綴（預設為 bigquery-public-data.thelook_ecommerce.）
+ALLOWED_TABLE_PREFIX = f"{settings.bigquery_data_project}.{settings.bigquery_dataset}.".lower()
+
+
+def _find_disallowed_tables(sql: str) -> list[str]:
+    """找出 FROM / JOIN 後面不屬於允許資料集的資料表。
+
+    規則：
+    - 含「.」的資料表參照，必須以 ALLOWED_TABLE_PREFIX 開頭（完整的 專案.資料集.資料表）。
+      兩段式的「資料集.資料表」會落在計費專案，同樣拒絕。
+    - 不含「.」的名稱（例如 WITH 定義的 CTE、UNNEST）略過；
+      BigQuery Client 未設定預設資料集，未完整指定的真實資料表在 Dry Run 就會失敗。
+    - 先移除 EXTRACT(... FROM 欄位)，避免把欄位誤判成資料表。
+    """
+    cleaned = re.sub(r"EXTRACT\s*\([^()]*\)", " ", sql, flags=re.IGNORECASE)
+    references = re.findall(r"\b(?:FROM|JOIN)\s+([`\w\-.*]+)", cleaned, flags=re.IGNORECASE)
+
+    disallowed: list[str] = []
+    for ref in references:
+        table = ref.replace("`", "").lower()
+        if "." in table and not table.startswith(ALLOWED_TABLE_PREFIX):
+            disallowed.append(ref.replace("`", ""))
+    return disallowed
+
+
+def _find_disallowed_referenced_tables(referenced_tables: Any) -> list[str]:
+    """用 BigQuery dry-run 回報的「實際被讀取資料表」做最終比對，不依賴正則解析。"""
+    disallowed: list[str] = []
+    for table in referenced_tables or []:
+        full_name = f"{table.project}.{table.dataset_id}.{table.table_id}"
+        if not full_name.lower().startswith(ALLOWED_TABLE_PREFIX):
+            disallowed.append(full_name)
+    return disallowed
+
+
+# SQL 字串長度上限，避免超長輸入
+MAX_SQL_LENGTH = 4000
+
 # 單次查詢預估掃描量安全上限（100 MiB）
 MAX_SCAN_BYTES_LIMIT = 100 * 1024 * 1024
 
@@ -47,15 +85,40 @@ def _validate_business_and_safety_rules(sql: str) -> dict[str, Any]:
         r"\bTRUNCATE\b",
         r"\bALTER\b",
         r"\bCREATE\b",
+        r"\bMERGE\b",
+        r"\bGRANT\b",
+        r"\bREVOKE\b",
+        r"\bEXPORT\b",
+        r"\bCALL\b",
+        r"\bEXECUTE\b",
+        r"\bLOAD\b",
+        r"\bEXTERNAL_QUERY\b",
+        r"\bINFORMATION_SCHEMA\b",
     ]
     for pattern in forbidden_keywords:
         if re.search(pattern, normalized):
+            keyword = pattern.replace(r"\b", "")  # 先取出關鍵字，f-string 內不可含反斜線（Python 3.11 相容）
             return {
                 "valid": False,
-                "error_message": f"禁止執行非唯讀指令（包含關鍵字: {pattern.replace(r'\b', '')}）。",
+                "error_message": f"禁止執行非唯讀指令（包含關鍵字: {keyword}）。",
             }
 
-    # 2. 商業計算規則：延續 calculation_tools 的除零保護
+    # 1-2. 只允許單一敘述，避免以分號夾帶第二個指令
+    if ";" in sql.strip().rstrip(";"):
+        return {"valid": False, "error_message": "只允許單一 SELECT 敘述，不可包含多個以分號分隔的指令。"}
+
+    # 2. 資料範圍保護：只允許查詢 TheLook 資料集
+    disallowed_tables = _find_disallowed_tables(sql)
+    if disallowed_tables:
+        return {
+            "valid": False,
+            "error_message": (
+                f"只能查詢 {ALLOWED_TABLE_PREFIX}* 底下的資料表，"
+                f"不允許存取：{', '.join(disallowed_tables)}。"
+            ),
+        }
+
+    # 3. 商業計算規則：延續 calculation_tools 的除零保護
     # 如果使用裸除法 / 號且未搭配 SAFE_DIVIDE，提醒使用 SAFE_DIVIDE 避免除以零報錯
     if "/" in sql and "SAFE_DIVIDE" not in normalized:
         return {
@@ -66,7 +129,7 @@ def _validate_business_and_safety_rules(sql: str) -> dict[str, Any]:
             ),
         }
 
-    # 3. 查詢範圍保護：確認是否有過大掃描風險
+    # 4. 查詢範圍保護：確認是否有過大掃描風險
     if "WHERE" not in normalized and "LIMIT" not in normalized:
         return {
             "valid": False,
@@ -111,9 +174,17 @@ def check_sql_syntax(sql: str) -> dict[str, Any]:
             "attempts": fail_count,
         }
 
+    if len(sql) > MAX_SQL_LENGTH:
+        return {
+            "status": "error",
+            "valid": False,
+            "error_message": f"SQL 長度超過上限 ({MAX_SQL_LENGTH} 字元)。",
+        }
+
     # 第一階段：規則與除零防護驗證
     rule_check = _validate_business_and_safety_rules(sql)
     if not rule_check["valid"]:
+        fail_count = _record_fix_failure()
         return {
             "status": "error",
             "valid": False,
@@ -145,6 +216,19 @@ def check_sql_syntax(sql: str) -> dict[str, Any]:
 
     try:
         query_job = client.query(sql, job_config=job_config)
+
+        # 最終防線：以 BigQuery 實際解析出的被讀取資料表比對白名單
+        disallowed_refs = _find_disallowed_referenced_tables(query_job.referenced_tables)
+        if disallowed_refs:
+            return {
+                "status": "error",
+                "valid": False,
+                "error_message": (
+                    f"只能查詢 {ALLOWED_TABLE_PREFIX}* 底下的資料表，"
+                    f"不允許存取：{', '.join(disallowed_refs)}。"
+                ),
+            }
+
         total_bytes = query_job.total_bytes_processed or 0
         mib_processed = round(total_bytes / (1024**2), 2)
 
@@ -209,7 +293,12 @@ def execute_sql_query(sql: str) -> dict[str, Any]:
     )
 
     try:
-        query_job = client.query(sql)
+        query_job = client.query(
+            sql,
+            job_config=bigquery.QueryJobConfig(
+                maximum_bytes_billed=settings.maximum_bytes_billed,
+            ),
+        )
         results = query_job.result()
         rows = [dict(row.items()) for row in results]
 

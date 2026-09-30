@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "db-dtypes>=1.4.0",
-    "google-adk>=2.5.0",
+    "google-adk>=2.9,<3",
     "google-cloud-bigquery>=3.42.2",
     "markitdown[pptx]>=0.1.7",
     "matplotlib>=3.11.2",
@@ -25,6 +25,9 @@ dependencies = [
     "langchain-qdrant>=1.1.0",
     "langchain-text-splitters>=1.1.2",
     "langchain-huggingface>=0.1.0",
+    "numpy>=1.26.0",
+    "defusedxml>=0.7.1",
+    "lxml>=5.0.0",
 ]
 
 [build-system]

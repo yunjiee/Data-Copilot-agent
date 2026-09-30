@@ -104,7 +104,11 @@ class SkillResolver:
     def save_skill(self, skill_name: str, content: str, target_dir: Optional[Path] = None) -> str:
         """建立或覆寫技能檔案。"""
         dest_dir = target_dir or (self.search_dirs[0] if self.search_dirs else PROJECT_ROOT / "skills")
-        clean_name = skill_name[:-3] if skill_name.endswith(".md") else skill_name
+        # 只取檔名部分，避免「../」路徑穿越寫到技能資料夾以外
+        name = Path(skill_name.strip()).name
+        clean_name = name[:-3] if name.endswith(".md") else name
+        if not clean_name:
+            return "❌ 儲存技能失敗：技能名稱不可為空。"
         skill_folder = dest_dir / clean_name
         skill_folder.mkdir(parents=True, exist_ok=True)
         target_file = skill_folder / "SKILL.md"
@@ -138,21 +142,37 @@ class SkillToolset(BaseToolset):
         self.allowed_skills = skills
         self._tools: Optional[List[BaseTool]] = None
 
+    def _is_allowed(self, skill_name: str) -> tuple[bool, str]:
+        """檢查技能名稱是否在允許清單內，並回傳去除路徑與副檔名後的名稱。
+
+        安全防護：
+        - 只取檔名部分（Path(...).name），阻擋「../」或絕對路徑，避免讀到 .env 等任意檔案。
+        - 名稱必須出現在 list_available() 的結果中（有設定 allowed_skills 時即為白名單）。
+        """
+        name = Path(skill_name.strip()).name
+        clean_name = name[:-3] if name.endswith(".md") else name
+        allowed = self.resolver.list_available(self.allowed_skills)
+        return clean_name in allowed, clean_name
+
     def _build_tools(self) -> List[BaseTool]:
-        """建立 Tool 函式並包裝為 ADK FunctionTool。"""
+        """建立 Tool 函式並包裝為 ADK FunctionTool。
+
+        只提供唯讀工具（list_skills、read_skill）。
+        create_skill 會讓 LLM 寫入檔案，簡報流程不需要，因此不對 Agent 開放。
+        """
         def list_skills() -> List[str]:
             """列出目前可查詢的所有專業技能與規範手冊名稱。"""
             return self.resolver.list_available(self.allowed_skills)
 
         def read_skill(skill_name: str) -> str:
-            """根據技能名稱讀取該專業技能的詳細手冊與設計規範內容。"""
-            return self.resolver.read(skill_name.strip())
+            """根據技能名稱讀取該專業技能的詳細手冊與設計規範內容（僅限 list_skills 列出的名稱）。"""
+            is_allowed, clean_name = self._is_allowed(skill_name)
+            if not is_allowed:
+                available = self.resolver.list_available(self.allowed_skills)
+                return f"錯誤：不允許讀取 '{skill_name}'。可讀取的技能：{available}"
+            return self.resolver.read(clean_name)
 
-        def create_skill(skill_name: str, content: str) -> str:
-            """根據技能名稱與 Markdown 規範內容，建立並儲存新的專業技能檔案。"""
-            return self.resolver.save_skill(skill_name.strip(), content)
-
-        return [FunctionTool(list_skills), FunctionTool(read_skill), FunctionTool(create_skill)]
+        return [FunctionTool(list_skills), FunctionTool(read_skill)]
 
     async def get_tools(self, readonly_context: Optional[Any] = None) -> List[BaseTool]:
         if self._tools is None:

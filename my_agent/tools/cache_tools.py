@@ -23,6 +23,16 @@ def _get_category_dir(category: str) -> Path:
     return target_dir
 
 
+def _safe_cache_path(target_dir: Path, filename: str) -> Path:
+    """只取檔名部分並補上 .json，確保結果一定落在該分類資料夾內（阻擋「../」與絕對路徑）。"""
+    name = Path(filename.strip().replace("\\", "/")).name
+    if not name or name in (".", ".."):
+        raise ValueError("快取檔名不可為空。")
+    if not name.endswith(".json"):
+        name = f"{name}.json"
+    return target_dir / name
+
+
 def save_cache_data(category: str, filename: str, data: Any) -> str:
     """將中途產出的查詢數據、RAG 檢索內容或報告整合資料保存至本地快取目錄。
 
@@ -35,10 +45,11 @@ def save_cache_data(category: str, filename: str, data: Any) -> str:
         儲存成功之檔案絕對路徑字串。
     """
     target_dir = _get_category_dir(category)
-    if not filename.endswith(".json"):
-        filename = f"{filename}.json"
-
-    target_path = target_dir / filename
+    try:
+        target_path = _safe_cache_path(target_dir, filename)
+    except ValueError as e:
+        return f"❌ 儲存快取失敗：{e}"
+    filename = target_path.name
 
     payload = {
         "saved_at": datetime.now().isoformat(),
@@ -75,11 +86,12 @@ def load_cache_data(category: str, filename: str = "latest") -> str:
             return f"[{category}] 目錄下查無任何快取檔案。"
         target_path = files[0]
     else:
-        if not filename.endswith(".json"):
-            filename = f"{filename}.json"
-        target_path = target_dir / filename
-        if not target_path.exists():
-            return f"查無快取檔案: {target_path}"
+        try:
+            target_path = _safe_cache_path(target_dir, filename)
+        except ValueError as e:
+            return f"❌ 讀取快取失敗：{e}"
+        if not target_path.is_file():
+            return f"查無快取檔案: {target_path.name}"
 
     with open(target_path, "r", encoding="utf-8") as f:
         return f.read()

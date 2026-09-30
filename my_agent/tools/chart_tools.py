@@ -4,7 +4,7 @@ import vl_convert as vlc
 
 # 動態取得專案根目錄 (my-adk-project)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-OUTPUT_DIR = PROJECT_ROOT / "output"
+OUTPUT_DIR = PROJECT_ROOT / "mas_output" / "workspace"
 
 
 def render_vegalite_chart(spec: Dict[str, Any], filename: str) -> str:

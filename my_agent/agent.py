@@ -33,6 +33,7 @@ from .tools.cache_tools import (
 
 from .tools.chart_tools import render_vegalite_chart
 from .tools.skill_toolset import SkillToolset
+from .tools.guard import before_tool_guard, after_tool_guard
 from mcp import StdioServerParameters
 from .config import config
 from .prompts import (
@@ -47,8 +48,22 @@ import logging
 # parents[1] 就是 my-adk-project
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-# MCP Server 子程序使用的環境變數
-server_environment = os.environ.copy()
+# MCP Server 子程序使用的環境變數：只傳必要變數，避免 GOOGLE_API_KEY 等機敏資訊被帶進子程序。
+# （MCP 另外會補上 PATH、SYSTEMROOT、USERPROFILE、APPDATA 等基本系統變數）
+_ENV_ALLOW_EXACT = {
+    "PATH", "PYTHONPATH", "PYTHONUTF8", "PYTHONIOENCODING", "VIRTUAL_ENV",
+    "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
+    "HOME", "MAXIMUM_BYTES_BILLED", "GOOGLE_APPLICATION_CREDENTIALS",
+}
+_ENV_ALLOW_PREFIXES = (
+    "BIGQUERY_", "RAG_", "LC_RAG_", "GOOGLE_CLOUD_", "CLOUDSDK_",
+    "HF_", "TRANSFORMERS_", "SENTENCE_TRANSFORMERS_", "TOKENIZERS_",
+)
+server_environment = {
+    key: value
+    for key, value in os.environ.items()
+    if key.upper() in _ENV_ALLOW_EXACT or key.upper().startswith(_ENV_ALLOW_PREFIXES)
+}
 
 # 讓 MCP Server 能找到專案根目錄下的 mcp_servers package
 existing_pythonpath = server_environment.get(
@@ -130,6 +145,8 @@ analytics_agent = LlmAgent(
     model=config.worker_model,
     description="數據分析專家 (Producer)，負責處理 BigQuery SQL 查詢，取得營收、訂單與商品績效等量化數據並存入快取。",
     instruction=ANALYTICS_AGENT_INSTRUCTION,
+    before_tool_callback=before_tool_guard,
+    after_tool_callback=after_tool_guard,
     tools=[
         check_sql_syntax,
         execute_sql_query,
@@ -145,6 +162,8 @@ knowledge_agent = LlmAgent(
     model=config.worker_model,
     description="知識庫專家 (Producer)，負責檢索公司內部政策、規定、文件與流程說明等質化資訊並存入快取。",
     instruction=KNOWLEDGE_AGENT_INSTRUCTION,
+    before_tool_callback=before_tool_guard,
+    after_tool_callback=after_tool_guard,
     tools=[
         search_knowledge_base_guarded,
         save_cache_data,
@@ -171,6 +190,8 @@ report_agent = LlmAgent(
     model=config.worker_model,
     description="商業洞察與簡報製作專家 (Consumer)，負責整合快取中的量化數據與質化知識，提煉洞察並直接產製 PowerPoint 簡報與圖表。",
     instruction=REPORT_AGENT_INSTRUCTION,
+    before_tool_callback=before_tool_guard,
+    after_tool_callback=after_tool_guard,
     tools=[
         report_skill_toolset,
         load_cache_data,
@@ -191,6 +212,8 @@ root_agent = LlmAgent(
         "TheLook eCommerce 總管 Agent (Selector)，負責分析問題、檢查快取狀態並分派給專業子 Agent。"
     ),
     instruction=ROOT_AGENT_INSTRUCTION,
+    before_tool_callback=before_tool_guard,
+    after_tool_callback=after_tool_guard,
     sub_agents=[
         analytics_agent,
         knowledge_agent,

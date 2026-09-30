@@ -8,6 +8,32 @@ MAX_TOTAL_EXECUTIONS = 5
 _pptx_retry_count = 0
 _total_execution_count = 0
 
+def _readonly_node_cmd(read_dir: str, *script_args: str, extra_read: tuple = ()) -> list:
+    """唯讀版的 Node.js 權限限制：只能讀 read_dir（及 extra_read），完全不能寫入或開子行程。"""
+    return [
+        "node",
+        "--permission",
+        f"--allow-fs-read={read_dir}",
+        *[f"--allow-fs-read={p}" for p in extra_read],
+        *script_args,
+    ]
+
+def _sandboxed_node_cmd(project_root: str, *script_args: str) -> list:
+    """組出啟用 Node.js Permission Model 的指令：腳本只能讀 mas_output/、node_modules，
+    只能寫 mas_output/workspace 與 mas_output/reports，且不可開子行程。即使關鍵字過濾被繞過，也讀不到 .env。"""
+    output_dir = os.path.join(project_root, "mas_output", "workspace")
+    reports_dir = os.path.join(project_root, "mas_output", "reports")
+    return [
+        "node",
+        "--permission",
+        f"--allow-fs-read={os.path.join(project_root, 'mas_output')}",
+        f"--allow-fs-read={os.path.join(project_root, 'node_modules')}",
+        f"--allow-fs-read={os.path.join(project_root, 'package.json')}",
+        f"--allow-fs-write={output_dir}",
+        f"--allow-fs-write={reports_dir}",
+        *script_args,
+    ]
+
 def reset_pptx_execution_state() -> str:
     """重設 PPT 腳本執行的重試與計數器狀態（開始新的簡報製作任務時可調用）。"""
     global _pptx_retry_count, _total_execution_count
@@ -22,8 +48,8 @@ def analyze_reference_pptx(reference_filename: str) -> str:
     並回傳解析後的 JSON 或結構資訊，供你模仿其設計並替換成新簡報的內容。
     """
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    # 假設簡報檔案放在 output 資料夾中或上傳到指定目錄
-    output_dir = os.path.join(project_root, "output")
+    # 假設簡報檔案放在 mas_output/workspace 資料夾中或上傳到指定目錄
+    output_dir = os.path.join(project_root, "mas_output", "workspace")
     scripts_dir = os.path.join(project_root, "my_agent", "skills", "pptx", "pptx", "scripts")
     
     safe_filename = os.path.basename(reference_filename)
@@ -37,7 +63,13 @@ def analyze_reference_pptx(reference_filename: str) -> str:
         return f"⚠️ 警告：找不到解析腳本 {parse_script}。請依照您原本對該簡報的認知與設計規範來進行模仿，或向使用者要求提供更詳細的結構描述。"
     
     try:
-        result = subprocess.run(["node", parse_script, file_path], capture_output=True, text=True, timeout=30, cwd=scripts_dir)
+        result = subprocess.run(
+            _readonly_node_cmd(
+                scripts_dir, parse_script, file_path,
+                extra_read=(output_dir, os.path.join(project_root, "node_modules")),
+            ),
+            capture_output=True, text=True, timeout=30, cwd=scripts_dir,
+        )
         if result.returncode == 0:
             return f"✅ 參考簡報架構解析成功！以下為提取的結構資訊：\n{result.stdout}\n\n請將此結構版型應用於您要生成的新簡報程式碼中。"
         else:
@@ -63,7 +95,7 @@ def safe_write_pptx_script(filename: str, code_content: str) -> str:
         return "❌ 錯誤：基於安全考量，只能寫入 .js 檔案。"
         
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    output_dir = os.path.join(project_root, "output")
+    output_dir = os.path.join(project_root, "mas_output", "workspace")
     os.makedirs(output_dir, exist_ok=True)
     
     file_path = os.path.join(output_dir, safe_filename)
@@ -79,7 +111,7 @@ def safe_write_pptx_script(filename: str, code_content: str) -> str:
         
     # 3. 強制防護機制：寫入後立即進行 Node.js 語法檢查，提前攔截低級錯誤
     try:
-        check_result = subprocess.run(["node", "-c", safe_filename], capture_output=True, text=True, cwd=output_dir)
+        check_result = subprocess.run(_readonly_node_cmd(output_dir, "--check", safe_filename), capture_output=True, text=True, cwd=output_dir)
         if check_result.returncode != 0:
             return f"❌ 錯誤：程式碼存在語法錯誤 (Syntax Error)，請立即修正後再重新寫入：\n{check_result.stderr}"
     except Exception as e:
@@ -101,7 +133,7 @@ def safe_execute_pptx_script(filename: str) -> str:
 
     safe_filename = os.path.basename(filename)
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    output_dir = os.path.join(project_root, "output")
+    output_dir = os.path.join(project_root, "mas_output", "workspace")
     reports_dir = os.path.join(project_root, "mas_output", "reports")
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(reports_dir, exist_ok=True)
@@ -112,8 +144,8 @@ def safe_execute_pptx_script(filename: str) -> str:
         
     try:
         _total_execution_count += 1
-        # 4. 安全防護：限制只執行 Node.js，且加上 Timeout 防止無窮迴圈浪費運算資源
-        result = subprocess.run(["node", safe_filename], capture_output=True, text=True, timeout=30, cwd=output_dir)
+        # 4. 安全防護：以 Node.js Permission Model 限縮檔案存取，且加上 Timeout 防止無窮迴圈浪費運算資源
+        result = subprocess.run(_sandboxed_node_cmd(project_root, safe_filename), capture_output=True, text=True, timeout=30, cwd=output_dir)
         if result.returncode == 0:
             _pptx_retry_count = 0  # 執行成功，將計數器歸零
             return f"✅ 腳本執行成功！輸出：\n{result.stdout}"
