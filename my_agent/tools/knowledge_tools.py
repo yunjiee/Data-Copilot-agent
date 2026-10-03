@@ -6,6 +6,9 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# RAG server 在模型尚未就緒時回傳的固定句子（兩個 server 都包含此字串）
+LOADING_MARKER = "正在背景載入"
+
 
 async def search_knowledge_base_guarded(
     query: str,
@@ -50,7 +53,7 @@ async def search_knowledge_base_guarded(
         result_str = str(raw_result)
         
         # 檢查後端是否仍處於背景加載或冷啟動狀態
-        is_loading = "正在背景載入" in result_str or "loading" in result_str.lower()
+        is_loading = LOADING_MARKER in result_str
         if is_loading and attempt < max_retries:
             logger.info(
                 "知識庫系統載入中，Python 正在進行背景非同步等待 %d 秒後重試 (累計等待 %d 秒)...",
