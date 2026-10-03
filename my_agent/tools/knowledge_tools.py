@@ -60,12 +60,20 @@ async def search_knowledge_base_guarded(
             await asyncio.sleep(retry_delay_seconds)
             continue
 
+        if is_loading:
+            # 已用完重試次數：不把後端的原始「載入中」訊息交給模型，改回傳明確的處置指示
+            waited_seconds = (max_retries - 1) * retry_delay_seconds
+            logger.warning("知識庫冷啟動超過 %d 秒仍未就緒，回報 loading_timeout", waited_seconds)
+            return {
+                "status": "loading_timeout",
+                "error_message": (
+                    f"知識庫仍在啟動中（已等待約 {waited_seconds} 秒）。"
+                    "請不要再重試此工具；直接告知使用者知識庫剛啟動、"
+                    "請約 30 秒後再問一次同樣的問題，並改以不依賴知識庫的資訊先行回覆。"
+                ),
+            }
+
         return {
-            "status": "success" if not is_loading else "loading_timeout",
+            "status": "success",
             "result": raw_result,
         }
-
-    return {
-        "status": "error",
-        "error_message": "知識庫冷啟動初始化超時 (超過 25 秒)，請稍後再試。",
-    }
