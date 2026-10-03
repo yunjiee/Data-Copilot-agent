@@ -1,6 +1,5 @@
 import os
 import subprocess
-from typing import List, Dict, Any
 
 # --- 強制防護機制：記錄 Agent 嘗試執行腳本失敗的次數 ---
 MAX_PPTX_RETRIES = 3

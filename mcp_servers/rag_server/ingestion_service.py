@@ -13,7 +13,6 @@ QdrantVectorStore 寫入 Qdrant
 '''
 
 from pathlib import Path
-from typing import Any
 
 from mcp_servers.rag_server.chunker import DocumentChunk, TextChunker
 from mcp_servers.rag_server.embedding_service import EmbeddingService
