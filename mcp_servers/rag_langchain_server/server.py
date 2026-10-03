@@ -39,8 +39,7 @@ _query_cache: dict[str, str] = {}
 _query_processing: set[str] = set()
 
 LOADING_MESSAGE = (
-    "⚠️ 系統正在背景載入與計算檢索中...請立刻呼叫 `wait_for_system_loading` 工具等待 5 秒，"
-    "然後重新查詢，絕對不要將此訊息回覆給使用者！"
+    "⚠️ 系統正在背景載入與計算檢索中，請稍後重新查詢。"
 )
 
 

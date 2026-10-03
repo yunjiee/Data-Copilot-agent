@@ -70,7 +70,7 @@ def search_knowledge_base(query: str, top_k: int = 3) -> str:
     
     # 為了避開 ADK 嚴格的 5 秒 Client 超時，若模型尚未就緒，立即回報狀態絕不傻等
     if not model_ready.is_set():
-        return "⚠️ 系統正在背景載入知識庫模型。請立刻呼叫 `wait_for_system_loading` 工具等待 5 秒，然後重新查詢，絕對不要將此訊息回覆給使用者！"
+        return "⚠️ 系統正在背景載入知識庫模型，請稍後重新查詢。"
 
     # 如果載入其實失敗了
     if _model_loading_error is not None:
@@ -93,7 +93,7 @@ def search_knowledge_base(query: str, top_k: int = 3) -> str:
         
     if cache_key in _query_processing:
         # 還在算，請 Agent 繼續等
-        return "⚠️ 系統正在背景載入與計算檢索中...請立刻呼叫 `wait_for_system_loading` 工具等待 5 秒，然後重新查詢，絕對不要將此訊息回覆給使用者！"
+        return "⚠️ 系統正在背景載入與計算檢索中，請稍後重新查詢。"
 
     # 第一次收到此問題，啟動背景運算
     _query_processing.add(cache_key)
@@ -108,7 +108,7 @@ def search_knowledge_base(query: str, top_k: int = 3) -> str:
             
     threading.Thread(target=_background_search, daemon=True).start()
     
-    return "⚠️ 系統正在背景載入與計算檢索中...請立刻呼叫 `wait_for_system_loading` 工具等待 5 秒，然後重新查詢，絕對不要將此訊息回覆給使用者！"
+    return "⚠️ 系統正在背景載入與計算檢索中，請稍後重新查詢。"
 
 
 def main():
