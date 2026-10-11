@@ -11,6 +11,7 @@ from google.api_core.exceptions import GoogleAPICallError
 from google.cloud import bigquery
 
 from .config import SQL_DIR, settings
+from .sql_service import SqlService
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +19,10 @@ logger = logging.getLogger(__name__)
 class AnalyticsService:
     """負責與 BigQuery 溝通的應用服務。"""
 
-    def __init__(self) -> None:
-        self.client = bigquery.Client(
-            project=settings.bigquery_project,
-            location=settings.bigquery_location,
-        )
+    def __init__(self, sql_service: SqlService) -> None:
+        # 與 SqlService 共用同一個 BigQuery Client，並共用其驗證與快取流程
+        self.sql_service = sql_service
+        self.client = sql_service.client
         self.order_items_table = settings.order_items_table
         self.products_table = settings.products_table
 
@@ -222,7 +222,19 @@ class AnalyticsService:
         ],
     ) -> tuple[list[Any], Any]:
 
-        """執行 BigQuery 查詢並回傳資料列與 Query Job。"""
+        """先通過 check_sql_syntax（規則 + Dry Run），再執行 BigQuery 查詢並回傳資料列與 Query Job。"""
+        # 固定 SQL 範本也必須通過與模型自產 SQL 相同的檢查；不計入模型的修正次數
+        check_result = self.sql_service.check_sql_syntax(
+            sql,
+            query_parameters=query_parameters,
+            track_failures=False,
+        )
+        if not check_result.get("valid"):
+            raise RuntimeError(
+                f"SQL 安全與語法審查未通過：{query_name}；"
+                f"{check_result.get('error_message')}"
+            )
+
         job_config = bigquery.QueryJobConfig(
             query_parameters=query_parameters or [],
             maximum_bytes_billed=(
@@ -334,11 +346,19 @@ class AnalyticsService:
                 8,
             )
 
+        # 與 execute_sql_query 一致：查詢成功即自動存入 analytics 快取
+        cache_path = self.sql_service.save_analytics_cache(
+            data,
+            query_name=query_type,
+        )
+
         return {
             "status": "success",
             "query_type": query_type,
             "filters": filters,
             "row_count": len(data),
+            "cache_saved": True,
+            "cache_path": cache_path,
             "data": data,
             "query_metadata": query_metadata,
         }

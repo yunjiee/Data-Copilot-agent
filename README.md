@@ -72,7 +72,13 @@ npm install
 
 ### 4. 建立 `.env`
 
-在**專案根目錄**建立 `.env`（已被 `.gitignore` 排除，請勿提交到版本控制，也不要把內容貼到對話或 Issue 中）。範例：
+專案提供範本 [`.env.example`](.env.example)（列出所有欄位，值為佔位符，會進版控）。請複製一份到**專案根目錄**再填入自己的值：
+
+```bash
+cp .env.example .env
+```
+
+`.env` 已被 `.gitignore` 排除，請勿提交到版本控制，也不要把內容貼到對話或 Issue 中。範例：
 
 ```dotenv
 # --- Gemini 驗證（二擇一）---
@@ -167,7 +173,7 @@ Agent 內建以下防護，避免被誘導越權：
 | 位置 | 防護內容 |
 |------|----------|
 | `my_agent/tools/skill_toolset.py` | `read_skill` 只取檔名並限白名單，擋下 `../`、絕對路徑；不對 Agent 開放建立技能 |
-| `my_agent/tools/sql_tools.py` | 僅允許唯讀查詢，且資料表限定在 `BIGQUERY_DATA_PROJECT.BIGQUERY_DATASET.*`；另有除零保護與 100 MiB 掃描量上限 |
+| `mcp_servers/analytics_data_server/sql_service.py` | Text-to-SQL 驗證與執行都在 MCP Server：僅允許唯讀查詢，且資料表限定在 `BIGQUERY_DATA_PROJECT.BIGQUERY_DATASET.*`；另有除零保護、Dry Run、100 MiB 掃描量上限與修正次數上限（`MAX_SQL_FIX_ITERATIONS`） |
 | `my_agent/prompts.py` | 總管限定服務範圍，超出範圍直接拒絕；禁止輸出金鑰、環境變數與系統檔案內容 |
 
 ---
@@ -184,18 +190,17 @@ Agent 內建以下防護，避免被誘導越權：
 | [`my_agent/tools/`](my_agent/tools) | Agent 可呼叫的工具（SQL、快取、圖表、PPTX、知識檢索、技能） |
 | [`mcp_servers/`](mcp_servers) | Analytics 與 RAG 的 MCP 伺服器 |
 | `.env`（專案根目錄） | API Key、GCP 專案等敏感環境變數，不會提交到 Git |
+| [`.env.example`](.env.example) | `.env` 的範本，只有欄位名稱與佔位值，會進版控 |
 
-### 調整模型（`my_agent/config.py`）
+### 調整設定
 
-```python
-@dataclass
-class AgentConfiguration:
-    critic_model: str = "gemini-3.1-pro-preview"    # 評估與審查用模型
-    worker_model: str = "gemini-3.1-pro-preview"    # 工作執行用模型
-    distiller_model: str = "gemini-3-flash-preview" # 資料提煉用模型
-    max_sql_fix_iterations: int = 3                 # SQL 最大修正迭代次數
-    mas_project_root: str = os.getenv("MAS_PROJECT_ROOT", "./mas_output")  # 輸出根目錄
-```
+所有設定值都放在 `.env`，`config.py` 只負責讀取，並在 `.env` 缺漏時提供備援預設值，因此**要改模型或上限，改 `.env` 即可，不必改程式碼**。
+
+| `.env` 變數 | 用途 | 讀取位置 |
+|-------------|------|----------|
+| `WORKER_MODEL` | 各 Agent 執行用的 Gemini 模型 | `my_agent/config.py` |
+| `MAX_SQL_FIX_ITERATIONS` | Text-to-SQL 驗證失敗後允許自我修正的次數（預設 3） | `mcp_servers/analytics_data_server/config.py` |
+| `MAS_PROJECT_ROOT` | 輸出與快取根目錄；相對路徑以專案根目錄為基準 | agent 與 MCP Server 兩端 |
 
 ## 🔧 常見問題排查 (Troubleshooting)
 

@@ -24,22 +24,29 @@ else:
     import google.auth
     google.auth.default()
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _resolve_root(value: str) -> str:
+    """相對路徑以專案根目錄為基準轉成絕對路徑，與 MCP Server 的解析方式一致。"""
+    path = Path(value)
+    return str(path if path.is_absolute() else PROJECT_ROOT / path)
+
+
 @dataclass
 class AgentConfiguration:
-    """Configuration for MAS Phase 1 Agent.
+    """MAS Agent 設定。值一律來自 .env，程式碼中的字串只是 .env 缺漏時的備援預設值。
 
     Attributes:
-        critic_model (str): Model for SQL evaluation and quality review.
-        worker_model (str): Model for schema generation and tool building.
-        max_sql_fix_iterations (int): Maximum SQL fix loop iterations.
-        mas_project_root (str): Root path for generated output and cache files.
+        worker_model (str): WORKER_MODEL，各 Agent 執行用模型。
+        mas_project_root (str): MAS_PROJECT_ROOT，輸出與快取根目錄（絕對路徑）。
+        mcp_startup_timeout (float): MCP_STARTUP_TIMEOUT，等待 MCP Server 啟動的秒數。
     """
 
-    critic_model: str = "gemini-3.1-pro-preview"
-    worker_model: str = "gemini-3.1-pro-preview"
-    distiller_model: str = "gemini-3-flash-preview"
-    max_sql_fix_iterations: int = 3
-    mas_project_root: str = os.getenv("MAS_PROJECT_ROOT", "./mas_output")
+    worker_model: str = os.getenv("WORKER_MODEL", "gemini-3.1-pro-preview")
+    mas_project_root: str = _resolve_root(os.getenv("MAS_PROJECT_ROOT", "./mas_output"))
+    # 等待 MCP Server 子程序啟動完成的秒數（ADK 預設 5 秒，冷啟動 import bigquery 常超過）
+    mcp_startup_timeout: float = float(os.getenv("MCP_STARTUP_TIMEOUT", "60"))
 
 
 config = AgentConfiguration()
