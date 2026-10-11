@@ -13,11 +13,6 @@ from google.adk.tools.mcp_tool.mcp_session_manager import (
 from .tools.calculation_tools import (
     calculate_growth_rate,
 )
-from .tools.sql_tools import (
-    check_sql_syntax,
-    execute_sql_query,
-    reset_sql_fix_state,
-)
 from .tools.knowledge_tools import search_knowledge_base_guarded
 from .tools.pptx_tools import (
     analyze_reference_pptx,
@@ -101,10 +96,14 @@ analytics_mcp_toolset = McpToolset(
             # 把目前環境變數傳入 MCP Server
             env=server_environment,
         ),
+        timeout=config.mcp_startup_timeout,
     ),
 
-    # 只將這兩個 MCP Tool 提供給 Agent
+    # 只將這些 MCP Tool 提供給 Agent（含 Text-to-SQL 的驗證、Dry Run 與執行）
     tool_filter=[
+        "check_sql_syntax",
+        "execute_sql_query",
+        "reset_sql_fix_state",
         "get_daily_sales",
         "get_server_status",
         "get_product_performance",
@@ -130,6 +129,7 @@ rag_mcp_toolset = McpToolset(
             cwd=str(PROJECT_ROOT),
             env=server_environment,
         ),
+        timeout=config.mcp_startup_timeout,
     ),
     tool_filter=["search_knowledge_base"],
 )
@@ -148,11 +148,8 @@ analytics_agent = LlmAgent(
     before_tool_callback=before_tool_guard,
     after_tool_callback=after_tool_guard,
     tools=[
-        check_sql_syntax,
-        execute_sql_query,
         analytics_mcp_toolset,
         save_cache_data,
-        reset_sql_fix_state,
     ],
 )
 

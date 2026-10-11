@@ -175,6 +175,12 @@ def _extract_produced_files(tool_name: str, response: Any) -> list[str]:
         text = response
     elif isinstance(response, dict):
         text = str(response.get("cache_path") or response.get("result") or "")
+        if not text:  # MCP 工具的結果可能包在 content[].text 或 structuredContent 裡
+            structured = response.get("structuredContent")
+            if isinstance(structured, dict):
+                text = str(structured.get("cache_path") or "")
+            for item in response.get("content") or []:
+                text += " " + str(item.get("text", "") if isinstance(item, dict) else "")
     else:
         return []
     return list(dict.fromkeys(_FILE_PATH_RE.findall(text)))
