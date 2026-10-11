@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import TimeoutError as FuturesTimeoutError
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from google.api_core.exceptions import GoogleAPICallError
@@ -25,6 +25,41 @@ class AnalyticsService:
         self.client = sql_service.client
         self.order_items_table = settings.order_items_table
         self.products_table = settings.products_table
+
+    def get_query_context(self) -> dict[str, Any]:
+        """回報目前可查詢的資料表、欄位與查詢限制，全部來自 .env 設定與 BigQuery 實際綱要。"""
+        tables = {
+            "order_items": settings.order_items_table,
+            "products": settings.products_table,
+        }
+        schemas: dict[str, Any] = {}
+        for alias, full_name in tables.items():
+            try:
+                table = self.client.get_table(full_name)
+                schemas[alias] = [
+                    {"name": field.name, "type": field.field_type}
+                    for field in table.schema
+                ]
+            except Exception as error:  # noqa: BLE001
+                logger.warning("讀取資料表綱要失敗：%s；%s", full_name, error)
+                schemas[alias] = f"無法讀取綱要：{error}"
+
+        return {
+            "status": "success",
+            "tables": tables,
+            "schemas": schemas,
+            "notes": [
+                "SQL 的 FROM / JOIN 必須使用 tables 中的完整名稱並以反引號包住，"
+                "且大小寫必須完全一致（BigQuery 資料集與資料表名稱區分大小寫）。",
+                "查詢 tables 以外的資料集會被拒絕。",
+            ],
+            "limits": {
+                "max_query_days": settings.max_query_days,
+                "max_product_limit": settings.max_product_limit,
+                "max_scan_mib": SqlService.MAX_SCAN_MIB,
+                "max_sql_fix_iterations": settings.max_sql_fix_iterations,
+            },
+        }
 
     def get_daily_sales(
         self,
@@ -391,11 +426,13 @@ class AnalyticsService:
                 "start_date 不可以晚於 end_date。"
             )
             
+        max_days = settings.max_query_days
         day_diff = (parsed_end_date - parsed_start_date).days
-        if day_diff > 7:
+        if day_diff > max_days:
+            suggested_end = parsed_start_date + timedelta(days=max_days)
             raise ValueError(
-                f"查詢區間為 {day_diff} 天，已超過安全規範上限 7 天！"
-                f"請將查詢期間縮小至 7 天以內（例如：{parsed_start_date} 至 {parsed_start_date.replace(day=min(parsed_start_date.day + 6, 28))}）。"
+                f"查詢區間為 {day_diff} 天，已超過安全規範上限 {max_days} 天！"
+                f"請將查詢期間縮小至 {max_days} 天以內（例如：{parsed_start_date} 至 {suggested_end}）。"
             )
 
         return (
@@ -429,7 +466,7 @@ class AnalyticsService:
         """
         驗證商品查詢的回傳筆數。
 
-        最少 1 筆，最多 100 筆。
+        最少 1 筆，最多 settings.max_product_limit 筆。
         """
 
         # bool 是 int 的子類別，所以要先排除 True、False
@@ -451,9 +488,9 @@ class AnalyticsService:
                 "limit 不可以小於 1。"
             )
 
-        if parsed_limit > 20:
+        if parsed_limit > settings.max_product_limit:
             raise ValueError(
-                "limit 不可以大於 20。"
+                f"limit 不可以大於 {settings.max_product_limit}。"
             )
 
         return parsed_limit

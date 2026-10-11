@@ -57,9 +57,22 @@ def execute_sql_query(sql: str) -> dict[str, Any]:
 @mcp.tool()
 def reset_sql_fix_state() -> dict[str, Any]:
     """
-    重設 SQL 驗證失敗的重試計數器。僅在開始全新的查詢任務時呼叫。
+    重設 SQL 驗證失敗的重試計數器。
+
+    僅供系統內部使用：agent 端在每輪對話開始時由程式呼叫，不提供給模型。
     """
     return sql_service.reset_fix_state()
+
+
+@mcp.tool()
+def get_query_context() -> dict[str, Any]:
+    """
+    取得目前可查詢的資料表完整名稱、欄位綱要與查詢限制
+    （日期跨度上限、商品筆數上限、掃描量上限、SQL 修正次數上限）。
+
+    自行撰寫 SQL 之前必須先呼叫一次，並以回傳的資料表名稱與欄位撰寫 SQL。
+    """
+    return service.get_query_context()
 
 
 @mcp.tool()
@@ -109,7 +122,7 @@ def get_product_performance(
         end_date:
             查詢結束日期，格式為 YYYY-MM-DD。
         limit:
-            回傳商品筆數，預設為 10，最多為 100。
+            回傳商品筆數，預設為 10；上限由系統設定決定（見 get_query_context 的 max_product_limit），超過會回傳錯誤。
 
     Returns:
         依營收由高至低排列的商品績效資料。

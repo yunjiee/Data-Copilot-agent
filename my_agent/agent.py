@@ -5,6 +5,7 @@ from pathlib import Path
 from google.adk.agents import ( 
     LlmAgent,
 )
+from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import (
     StdioConnectionParams,
@@ -76,6 +77,34 @@ server_environment["PYTHONPATH"] = os.pathsep.join(
 )
 
 
+# 只給模型使用的 Analytics MCP Tool。
+# reset_sql_fix_state 是「停損鎖」的解鎖開關，不能讓模型自己呼叫（否則等於可以繞過重試上限），
+# 因此不在這份名單中，只由程式在每輪對話開始時呼叫（見 _reset_sql_fix_state）。
+ANALYTICS_MODEL_TOOLS = frozenset(
+    {
+        "check_sql_syntax",
+        "execute_sql_query",
+        "get_daily_sales",
+        "get_server_status",
+        "get_product_performance",
+        "get_query_context",
+    }
+)
+_INTERNAL_RESET_TOOL = "reset_sql_fix_state"
+
+
+class _InternalContext(ReadonlyContext):
+    """標記「這是程式內部在取工具」的 context；模型取得工具清單時不會用到它。"""
+
+
+def _analytics_tool_filter(tool, readonly_context=None) -> bool:
+    if tool.name in ANALYTICS_MODEL_TOOLS:
+        return True
+    return tool.name == _INTERNAL_RESET_TOOL and isinstance(
+        readonly_context, _InternalContext
+    )
+
+
 # 建立 ADK 使用的 MCP Client／Toolset
 analytics_mcp_toolset = McpToolset(
     connection_params=StdioConnectionParams(
@@ -99,15 +128,8 @@ analytics_mcp_toolset = McpToolset(
         timeout=config.mcp_startup_timeout,
     ),
 
-    # 只將這些 MCP Tool 提供給 Agent（含 Text-to-SQL 的驗證、Dry Run 與執行）
-    tool_filter=[
-        "check_sql_syntax",
-        "execute_sql_query",
-        "reset_sql_fix_state",
-        "get_daily_sales",
-        "get_server_status",
-        "get_product_performance",
-    ],
+    # 只將 ANALYTICS_MODEL_TOOLS 提供給模型（含 Text-to-SQL 的驗證、Dry Run 與執行）
+    tool_filter=_analytics_tool_filter,
 )
 
 # 根據環境變數 RAG_BACKEND 動態決定啟動哪一個 RAG MCP Server
@@ -139,12 +161,30 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
 )
 
+async def _reset_sql_fix_state(callback_context):
+    """每次進入 analytics_agent（新一輪提問）時，由程式重設 SQL 修正計數器。
+
+    失敗只記錄警告，不中斷對話；計數器在查詢成功後本來就會自動歸零。
+    """
+    try:
+        internal_context = _InternalContext(callback_context._invocation_context)
+        tools = await analytics_mcp_toolset.get_tools(internal_context)
+        reset_tool = next(t for t in tools if t.name == _INTERNAL_RESET_TOOL)
+        await reset_tool.run_async(args={}, tool_context=callback_context)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "重設 SQL 修正計數器失敗，沿用目前計數。", exc_info=True
+        )
+    return None
+
+
 # 建立專門處理數據的子 Agent
 analytics_agent = LlmAgent(
     name="analytics_agent",
     model=config.worker_model,
     description="數據分析專家 (Producer)，負責處理 BigQuery SQL 查詢，取得營收、訂單與商品績效等量化數據並存入快取。",
     instruction=ANALYTICS_AGENT_INSTRUCTION,
+    before_agent_callback=_reset_sql_fix_state,
     before_tool_callback=before_tool_guard,
     after_tool_callback=after_tool_guard,
     tools=[

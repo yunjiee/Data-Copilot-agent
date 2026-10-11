@@ -54,6 +54,40 @@ class AnalyticsServerSettings(BaseSettings):
         validation_alias="BIGQUERY_QUERY_TIMEOUT_SECONDS",
     )
 
+    # Text-to-SQL 驗證失敗後，允許模型自我修正的最大次數。
+    max_sql_fix_iterations: int = Field(
+        default=3,
+        gt=0,
+        validation_alias="MAX_SQL_FIX_ITERATIONS",
+    )
+
+    # 單次查詢允許的最大日期跨度（end_date - start_date 的天數）。
+    max_query_days: int = Field(
+        default=7,
+        gt=0,
+        validation_alias="MAX_QUERY_DAYS",
+    )
+
+    # get_product_performance 單次最多回傳的商品筆數。
+    max_product_limit: int = Field(
+        default=20,
+        gt=0,
+        validation_alias="MAX_PRODUCT_LIMIT",
+    )
+
+    # 快取輸出根目錄；相對路徑以專案根目錄為基準。
+    mas_project_root: str = Field(
+        default="./mas_output",
+        validation_alias="MAS_PROJECT_ROOT",
+    )
+
+    @property
+    def cache_root(self) -> Path:
+        """取得快取根目錄的絕對路徑。"""
+
+        root = Path(self.mas_project_root)
+        return root if root.is_absolute() else PROJECT_ROOT / root
+
     @property
     def order_items_table(self) -> str:
         """取得 TheLook order_items 完整資料表名稱。"""

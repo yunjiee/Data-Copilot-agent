@@ -23,9 +23,12 @@ from .config import settings
 logger = logging.getLogger(__name__)
 
 # 允許查詢的資料集前綴（預設為 bigquery-public-data.thelook_ecommerce.）
-ALLOWED_TABLE_PREFIX = (
+# 顯示用（保留原始大小寫；BigQuery 資料集與資料表名稱區分大小寫，訊息若轉小寫會誤導模型）
+DISPLAY_TABLE_PREFIX = (
     f"{settings.bigquery_data_project}.{settings.bigquery_dataset}."
-).lower()
+)
+# 比對用（全小寫）
+ALLOWED_TABLE_PREFIX = DISPLAY_TABLE_PREFIX.lower()
 
 # SQL 字串長度上限，避免超長輸入
 MAX_SQL_LENGTH = 4000
@@ -98,7 +101,7 @@ def _validate_business_and_safety_rules(sql: str) -> dict[str, Any]:
         return {
             "valid": False,
             "error_message": (
-                f"只能查詢 {ALLOWED_TABLE_PREFIX}* 底下的資料表，"
+                f"只能查詢 {DISPLAY_TABLE_PREFIX}* 底下的資料表，"
                 f"不允許存取：{', '.join(disallowed_tables)}。"
             ),
         }
@@ -140,6 +143,8 @@ def _json_safe(value: Any) -> Any:
 
 class SqlService:
     """Text-to-SQL 的驗證（規則 + Dry Run）與執行服務。"""
+
+    MAX_SCAN_MIB = MAX_SCAN_BYTES_LIMIT // (1024 * 1024)
 
     def __init__(self) -> None:
         self.client = bigquery.Client(
@@ -257,7 +262,7 @@ class SqlService:
                     "status": "error",
                     "valid": False,
                     "error_message": (
-                        f"只能查詢 {ALLOWED_TABLE_PREFIX}* 底下的資料表，"
+                        f"只能查詢 {DISPLAY_TABLE_PREFIX}* 底下的資料表，"
                         f"不允許存取：{', '.join(disallowed_refs)}。"
                     ),
                 }
